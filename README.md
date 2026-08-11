@@ -1,199 +1,222 @@
-# Annotation Overlay
+# Annotation Overlay MCP
 
-DOM-aware visual annotation overlay for web pages. Draw arrows, boxes, text labels, and freehand strokes directly on any page. Every annotation automatically links to the underlying DOM element — output JSON carries CSS selectors, not just pixel coordinates.
+DOM-aware visual annotation overlay for web feedback. Draw arrows, boxes, text, freehand strokes, click elements, and annotate text selections — all in one toolbar. Submit structured annotations to Claude Code via MCP.
 
-**Zero dependencies. Single file. 862 lines of vanilla JS.**
+**6 interaction modes. Zero JS dependencies. Chrome Extension + MCP Server.**
 
-Born from the [visual-design-loop](https://github.com/cc10143/annotation-overlay) workflow: inject → annotate → get structured feedback → fix code.
-
-## Why
-
-Existing annotation tools fall into two camps:
-
-| Approach | Examples | Problem |
-|---|---|---|
-| Screenshot + draw | claude-visual-feedback, Tandem draw mode | Pixel coordinates only. Have to manually `elementFromPoint` to find the DOM element. Multi-color annotations require post-processing. |
-| Build plugin injection | PinFix | Only works with Vite/Webpack dev servers. Can't annotate static HTML, third-party pages, or production. |
-| Chrome extension | Vibe Annotations, Agentation | Requires installing an extension. Can't use with Tandem, Playwright, or other browser automation. |
-| Heavy library | Redline (Fabric.js CDN) | 200KB+ dependency, requires network. Show/hide canvas causes flicker. |
-
-**Annotation Overlay** bridges the gap — inject anywhere, zero deps, structured output.
+```
+[Browser Page]  ←→  [Chrome Extension]  ←→  [MCP Server]  ←→  [Claude Code]
+   overlay.js         bridge.js              HTTP + stdio       read/clear tools
+```
 
 ## Quick Start
 
-### Inject via browser console / Tandem evaluate
+### 1. Install & Start MCP Server
 
-```js
-// Copy the entire contents of annotation-overlay.js and evaluate it in the page.
-// The overlay auto-installs. Press Ctrl+Shift+A to activate.
+```bash
+git clone https://github.com/cc10143/annotation-overlay-mcp.git
+cd annotation-overlay-mcp
+npm install
+npm start
+# → HTTP server on port 3847 + MCP stdio transport connected
 ```
 
-Then:
-1. `Ctrl+Shift+A` — toggle the toolbar
-2. Select a tool (arrow / box / text / freehand) and a color
-3. Draw on the page — each annotation prompts for a comment
-4. Press **Done** or `Ctrl+Shift+A` again — JSON copied to clipboard
+### 2. Load Chrome Extension
 
-### Inject via script tag
+1. Open `chrome://extensions`
+2. Enable **Developer mode**
+3. Click **Load unpacked**
+4. Select the `extension/` directory
+
+The overlay now auto-injects on every page. Press `Ctrl+Shift+A` to toggle the toolbar.
+
+### 3. Configure Claude Code MCP
+
+```json
+// ~/.claude/settings.json
+{
+  "mcpServers": {
+    "annotation-overlay-mcp": {
+      "command": "node",
+      "args": ["D:/KaiFa/annotation-overlay/server/index.js"]
+    }
+  }
+}
+```
+
+Or use the CLI:
+
+```bash
+claude mcp add annotation-overlay-mcp -- node D:/KaiFa/annotation-overlay/server/index.js
+```
+
+## Usage
+
+### Annotation Workflow
+
+1. **Open any page** — the overlay auto-injects via Chrome extension
+2. **Annotate** — use any of the 6 tools to mark issues
+3. **Submit** — click Submit to send structured JSON to the MCP server
+4. **Agent reads** — Claude Code calls `read_annotations` → processes feedback
+5. **Page refreshes** — extension auto-reinjects overlay → next round
+
+### Tools
+
+| Tool | Label | How | DOM Link |
+|------|-------|-----|----------|
+| Arrow | ➤ | Click & drag → arrow with comment | Element under arrowhead |
+| Box | □ | Click & drag → rectangle with comment | Element under box center |
+| Text | T | Click → floating text label | Element under click point |
+| Freehand | ✎ | Click & drag → freeform drawing | Element under bbox center |
+| **Select** | **+** | Hover highlights blue → click to pin numbered badge | Clicked element |
+| **TextSel** | **[ ]** | Select page text → comment input at selection | Containing element |
+
+### Keyboard Shortcuts
+
+| Key | Action |
+|-----|--------|
+| `Ctrl+Shift+A` | Toggle overlay |
+| `Ctrl+Z` | Undo last annotation |
+| `Escape` | Cancel drawing / close overlay |
+| `Enter` | Confirm comment |
+| `Shift+Enter` | Newline in comment |
+
+### Colors
+
+5 preset colors: red `#e94560`, blue `#4080f0`, green `#2ecc71`, yellow `#f1c40f`, purple `#9b59b6`.
+
+## MCP Tools
+
+### `read_annotations`
+
+Read all pending annotations. Each annotation includes:
+
+```json
+{
+  "id": "uuid",
+  "type": "arrow | circle | text | freehand | select | textsel",
+  "comment": "user feedback text",
+  "selector": "div.card:nth-child(1) > button.btn-primary",
+  "fallbackSelectors": [
+    { "type": "id", "value": "#submit-btn" },
+    { "type": "cssPath", "value": "div.card:nth-child(1) > ..." },
+    { "type": "contentHash", "value": "Buy Now-a3f8b2c1" }
+  ],
+  "tagName": "BUTTON",
+  "classes": ["btn-primary"],
+  "elementText": "Buy Now",
+  "contentHash": "Buy Now-a3f8b2c1",
+  "position": { "start": {"x":100,"y":200}, "end": {"x":300,"y":400} },
+  "color": "#e94560"
+}
+```
+
+### `clear_annotations`
+
+Clear all stored annotations. Call after processing feedback.
+
+## Selector Fallback Chain
+
+When the agent regenerates the page, CSS selectors may break. Each annotation carries a fallback chain:
+
+1. **id** — `#element-id` (most stable)
+2. **cssPath** — `div.card:nth-child(1) > button.btn-primary`
+3. **contentHash** — `Buy Now-a3f8b2c1` (first 40 chars of text + djb2 hash)
+
+The agent should try each fallback in order when resolving elements after page changes.
+
+## Standalone Use (Without Extension)
+
+The overlay can be injected into any page via script tag or browser console:
 
 ```html
 <script src="annotation-overlay.js"></script>
 ```
 
-The overlay stays hidden until `Ctrl+Shift+A` is pressed. Remove the script tag before production builds.
-
-### Auto-activate via URL
-
-Append `?__anno=1` to any URL. The overlay activates immediately on page load.
-
-## Drawing Tools
-
-| Tool | How to use | DOM target |
-|---|---|---|
-| **Arrow** (➤) | Click & drag from start to end | Element under arrowhead |
-| **Box** (□) | Click & drag to enclose region | Element under box center |
-| **Text** (T) | Click to place, type comment | Element under click point |
-| **Freehand** (✎) | Click & drag to draw freely | Element under bounding-box center |
-
-## Keyboard Shortcuts
-
-| Key | Action |
-|---|---|
-| `Ctrl+Shift+A` | Toggle overlay on/off |
-| `Ctrl+Z` | Undo last annotation |
-| `Escape` | Cancel current drawing / close overlay |
-| `Enter` | Confirm comment |
-| `Shift+Enter` | New line in comment |
-
-## Colors
-
-Five preset colors:
-
-- Red `#e94560`
-- Blue `#4080f0`
-- Green `#2ecc71`
-- Yellow `#f1c40f`
-- Purple `#9b59b6`
-
-Click a swatch in the toolbar to switch. All annotations in the output JSON carry their color.
-
-## Output Format
-
-```json
-{
-  "version": "1",
-  "url": "https://example.com/page",
-  "viewport": { "width": 1440, "height": 900 },
-  "timestamp": "2026-08-11T12:00:00Z",
-  "annotations": [
-    {
-      "id": "a1b2c3d4",
-      "type": "arrow",
-      "comment": "Change button color to match brand",
-      "selector": "div.card:nth-child(1) > button.btn-primary",
-      "tagName": "BUTTON",
-      "classes": ["btn-primary"],
-      "elementText": "Buy Now",
-      "color": "#e94560",
-      "position": {
-        "start": { "x": 100, "y": 200 },
-        "end": { "x": 300, "y": 400 }
-      }
-    }
-  ]
-}
-```
-
-### Field Reference
-
-| Field | Description |
-|---|---|
-| `type` | `arrow` / `circle` / `text` / `freehand` |
-| `selector` | Unique CSS selector (DOM walk + `:nth-child` disambiguation) |
-| `tagName` | Lowercase HTML tag name |
-| `classes` | Array of CSS class names on the target element |
-| `elementText` | First 80 characters of the target element's text content |
-| `color` | Hex color used for the annotation stroke |
-| `position` | Tool-specific geometry (arrow=start+end, circle=x+y+w+h, text=x+y, freehand=points[]) |
-
-## Public API
+Or via Tandem evaluate / Playwright:
 
 ```js
-window.__annotationOverlay.activate()    // Show toolbar, start annotating
-window.__annotationOverlay.deactivate()  // Hide overlay, restore page
-window.__annotationOverlay.toggle()      // Toggle between activate/deactivate
-window.__annotationOverlay.serialize()   // → JSON string of all annotations
-window.__annotationOverlay.clear()       // Remove all annotations
+// Tandem
+tandem_devtools_evaluate({ function: "..." }) // paste annotation-overlay.js contents
+
+// Playwright
+await page.evaluate(fs.readFileSync('annotation-overlay.js', 'utf-8'));
 ```
 
-## Integration Examples
-
-### With Tandem (Claude Code browser)
+Public API:
 
 ```js
-// 1. Open page in Tandem
-// 2. tandem_devtools_evaluate — paste annotation-overlay.js contents
-// 3. __annotationOverlay.activate()
-// 4. User annotates → Done
-// 5. tandem_devtools_evaluate: __annotationOverlay.serialize() → structured JSON
-// 6. Use selector to grep source code, read computed styles, apply fixes
+__annotationOverlay.activate()    // show toolbar
+__annotationOverlay.deactivate()  // hide overlay
+__annotationOverlay.serialize()   // → JSON string
+__annotationOverlay.clear()       // remove all annotations
+__annotationOverlay.submit()      // send to MCP server via direct fetch
 ```
-
-### With Playwright
-
-```js
-// Inject into a Playwright page
-const overlay = await page.evaluate(fs.readFileSync('annotation-overlay.js', 'utf8'));
-// ...wait for user to annotate and press Done...
-const result = await page.evaluate(() => __annotationOverlay.serialize());
-const annotations = JSON.parse(result);
-```
-
-### With any browser automation
-
-The overlay is a self-contained IIFE. Inject it into any page context, call the public API, read structured results. No CDN, no npm install, no build step.
 
 ## Architecture
 
 ```
-┌──────────────────────────────────────────────────┐
-│              annotation-overlay.js                │
-│                                                   │
-│  ┌──────────┐  ┌──────────┐  ┌────────────────┐  │
-│  │ Toolbar  │  │  Canvas  │  │  DOM Bridge    │  │
-│  │  UI      │  │  2D      │  │  elementFrom   │  │
-│  │          │  │  Engine  │  │  Point + CSS   │  │
-│  │          │  │          │  │  selector gen  │  │
-│  └────┬─────┘  └────┬─────┘  └───────┬────────┘  │
-│       │             │               │            │
-│       └─────────────┴───────┬───────┘            │
-│                             │                    │
-│                   ┌─────────▼─────────┐          │
-│                   │  Annotation Model │          │
-│                   │  + JSON Serializer│          │
-│                   └───────────────────┘          │
-└──────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────┐
+│  annotation-overlay.js  (src/, ~700 lines)            │
+│                                                      │
+│  ┌──────────┐  ┌──────────┐  ┌──────────────────┐   │
+│  │ Toolbar  │  │  Canvas  │  │  DOM Bridge      │   │
+│  │  6 tools │  │  2D ctx  │  │  elementFromPoint │   │
+│  │  5 colors│  │  DPR     │  │  CSS selector gen │   │
+│  │  Submit  │  │  undo    │  │  contentHash      │   │
+│  └────┬─────┘  └────┬─────┘  └────────┬─────────┘   │
+│       │             │                │               │
+│       └─────────────┴───────┬────────┘               │
+│                             │                         │
+│                    ┌────────▼────────┐                │
+│                    │  Annotation Model│               │
+│                    │  + Serializer   │               │
+│                    │  + Fallback     │               │
+│                    └────────┬────────┘               │
+└─────────────────────────────┼────────────────────────┘
+                              │ postMessage
+┌─────────────────────────────┼────────────────────────┐
+│  Chrome Extension           ▼                         │
+│  ┌──────────────┐  ┌──────────────┐                  │
+│  │  bridge.js   │  │  service-    │                  │
+│  │  (ISOLATED)  │  │  worker.js   │                  │
+│  │  inject +    │  │  badge +     │                  │
+│  │  relay       │  │  relay       │                  │
+│  └──────┬───────┘  └──────┬───────┘                  │
+└─────────┼──────────────────┼──────────────────────────┘
+          │                  │ HTTP (port 3847)
+┌─────────▼──────────────────▼──────────────────────────┐
+│  MCP Server (Node.js, single process)                  │
+│  ┌──────────────┐  ┌──────────────┐                   │
+│  │  Express API │  │  MCP stdio   │                   │
+│  │  POST/GET/   │  │  read_       │                   │
+│  │  DELETE ann  │  │  clear tools │                   │
+│  └──────┬───────┘  └──────┬───────┘                   │
+│         └────────┬─────────┘                           │
+│         ┌────────▼────────┐                            │
+│         │  In-memory Store│                            │
+│         └─────────────────┘                            │
+└────────────────────────────────────────────────────────┘
 ```
-
-**Key design decisions:**
-
-- **Canvas 2D over Fabric.js / SVG** — zero dependencies, DPR-aware, no CDN fetch
-- **`pointer-events:none` toggle over canvas show/hide** — no flicker when `elementFromPoint` peeks through to the page
-- **CSS selector generation with `:nth-child` disambiguation** — unique selectors without requiring IDs
-- **Single-file IIFE** — inject via eval, script tag, or browser automation with no module system
 
 ## Comparison
 
-| | Annotation Overlay | Redline | PinFix | Vibe Annotations |
-|---|---|---|---|---|
-| Zero dependencies | ✓ | ✗ (Fabric.js CDN) | ✓ | ✗ (Chrome ext + npm) |
-| Works on any page | ✓ | ✓ | ✗ (build tool only) | ✓ (same-origin ext) |
-| Freehand drawing | ✓ | ✓ | ✗ (click-to-pin) | ✗ (click-to-select) |
-| CSS selectors in output | ✓ | ✓ | ✓ (data attr) | ✓ |
-| Structured JSON output | ✓ | ✓ | ✗ (text chat) | ✓ (MCP) |
-| Injects via eval/script tag | ✓ | ✓ | ✗ | ✗ |
-| No browser extension needed | ✓ | ✓ | ✓ | ✗ |
+| | Annotation Overlay MCP | Vibe Annotations | Dongke-X/redline |
+|---|---|---|---|
+| Drawing tools | 4 (arrow/box/text/freehand) | None | Full HTML editor |
+| Click-to-select | Yes (+ badge) | Yes | Full edit |
+| Text selection annotation | Yes | No | No |
+| MCP automation | Yes (stdio) | Yes (SSE/HTTP) | No (file-based) |
+| Selector fallback | id→cssPath→contentHash | source maps | id→cssPath→contentHash |
+| License | MIT | PolyForm Shield | Apache 2.0 |
+| Dependencies | 3 (Express + cors + MCP SDK) | Many (WXT, etc.) | Many (React, etc.) |
+
+## Configuration
+
+| Env Var | Default | Description |
+|---------|---------|-------------|
+| `ANNO_PORT` | `3847` | HTTP server port |
 
 ## License
 
-MIT
+MIT — Copyright (c) 2026 gaogao

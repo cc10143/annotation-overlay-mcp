@@ -1,0 +1,46 @@
+{
+  "name": "annotation-overlay-mcp",
+  "version": "2.0.0",
+  "description": "DOM-aware visual annotation overlay with Chrome Extension & MCP Server for AI coding agents. 6 interaction modes. Built for Claude Code.",
+  "license": "MIT",
+  "type": "module",
+  "bin": {
+    "annotation-overlay-mcp": "./bin/cli.js"
+  },
+  "scripts": {
+    "start": "node server/index.js",
+    "dev": "node --watch server/index.js",
+    "build": "node scripts/build.js",
+    "icons": "node scripts/generate-icons.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "cors": "^2.8.5",
+    "express": "^4.21.0"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/cc10143/annotation-overlay-mcp"
+  },
+  "keywords": [
+    "annotation",
+    "visual-feedback",
+    "claude-code",
+    "mcp",
+    "chrome-extension",
+    "overlay",
+    "dom",
+    "canvas"
+  ],
+  "author": "gaogao",
+  "files": [
+    "bin/",
+    "server/",
+    "extension/",
+    "src/",
+    "annotation-overlay.js"
+  ]
+}

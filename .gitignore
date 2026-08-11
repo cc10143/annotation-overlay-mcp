@@ -2,3 +2,8 @@ node_modules/
 .DS_Store
 Thumbs.db
 *.log
+extension/annotation-overlay.js
+extension/icons/icon*.png
+MEMORY.md
+SESSION_SUMMARY.md
+CLAUDE.md

@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      width: 200px;
+      padding: 12px;
+      font: 13px system-ui, -apple-system, sans-serif;
+      color: #cdd6f4;
+      background: #1e1e2e;
+    }
+    h3 {
+      font-size: 13px;
+      font-weight: 600;
+      margin-bottom: 10px;
+      color: #cdd6f4;
+    }
+    button {
+      width: 100%;
+      padding: 6px;
+      margin: 4px 0;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font: inherit;
+      font-size: 12px;
+    }
+    .clear {
+      background: #e94560;
+      color: #fff;
+    }
+    .clear:hover {
+      background: #d13350;
+    }
+    .status {
+      font-size: 11px;
+      color: #a6adc8;
+      margin-top: 8px;
+      text-align: center;
+    }
+    .status.ok { color: #a6e3a1; }
+    .status.err { color: #f38ba8; }
+  </style>
+</head>
+<body>
+  <h3>Annotation Overlay MCP</h3>
+  <button id="clearBtn" class="clear">Clear All Annotations</button>
+  <div id="status" class="status">Checking server...</div>
+  <script src="popup.js"></script>
+</body>
+</html>

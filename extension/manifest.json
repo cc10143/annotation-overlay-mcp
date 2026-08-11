@@ -1,0 +1,33 @@
+{
+  "manifest_version": 3,
+  "name": "Annotation Overlay MCP",
+  "version": "2.0.0",
+  "description": "Visual annotation overlay for AI coding agents. Draw arrows, boxes, text, freehand, click elements, and annotate text selections. Submit structured annotations via MCP server.",
+  "permissions": ["storage", "activeTab", "scripting"],
+  "host_permissions": ["<all_urls>", "http://localhost:3847/*"],
+  "background": {
+    "service_worker": "service-worker.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["bridge.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["annotation-overlay.js"],
+      "matches": ["<all_urls>"]
+    }
+  ],
+  "action": {
+    "default_title": "Annotation Overlay MCP",
+    "default_popup": "popup.html"
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  }
+}
