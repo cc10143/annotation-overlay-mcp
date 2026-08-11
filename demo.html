@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Annotation Overlay — Demo</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: system-ui, -apple-system, sans-serif;
+    background: #f5f5f5;
+    color: #333;
+    line-height: 1.6;
+  }
+  header {
+    background: #1e1e2e;
+    color: #cdd6f4;
+    padding: 32px;
+    text-align: center;
+  }
+  header h1 { font-size: 28px; margin-bottom: 8px; }
+  header p { color: #a6adc8; font-size: 14px; }
+  main {
+    max-width: 800px;
+    margin: 0 auto;
+    padding: 32px 20px;
+  }
+  .card {
+    background: #fff;
+    border: 1px solid #e0e0e0;
+    border-radius: 12px;
+    padding: 24px;
+    margin-bottom: 20px;
+    box-shadow: 0 1px 3px rgba(0,0,0,.06);
+  }
+  .card h2 { font-size: 18px; margin-bottom: 8px; }
+  .card p { color: #666; font-size: 14px; margin-bottom: 12px; }
+  .btn-primary {
+    display: inline-block;
+    padding: 10px 20px;
+    background: #4080f0;
+    color: #fff;
+    border: none;
+    border-radius: 8px;
+    font-size: 14px;
+    cursor: pointer;
+  }
+  .btn-primary:hover { background: #3068d0; }
+  .btn-danger {
+    display: inline-block;
+    padding: 10px 20px;
+    background: #e94560;
+    color: #fff;
+    border: none;
+    border-radius: 8px;
+    font-size: 14px;
+    cursor: pointer;
+  }
+  .btn-danger:hover { background: #c03050; }
+  nav {
+    display: flex;
+    gap: 16px;
+    background: #fff;
+    border-bottom: 1px solid #e0e0e0;
+    padding: 0 20px;
+  }
+  nav a {
+    padding: 12px 0;
+    color: #666;
+    text-decoration: none;
+    font-size: 14px;
+    border-bottom: 2px solid transparent;
+  }
+  nav a:hover { color: #333; border-bottom-color: #4080f0; }
+  footer {
+    text-align: center;
+    padding: 24px;
+    color: #999;
+    font-size: 12px;
+  }
+</style>
+</head>
+<body>
+
+<nav>
+  <a href="#">Home</a>
+  <a href="#">Docs</a>
+  <a href="#">Examples</a>
+  <a href="#">About</a>
+</nav>
+
+<header>
+  <h1>Annotation Overlay Demo</h1>
+  <p>Press Ctrl+Shift+A to start annotating this page</p>
+</header>
+
+<main>
+  <div class="card">
+    <h2>Getting Started</h2>
+    <p>This is a demo page for testing the annotation overlay. Each card represents a UI component you might want to annotate.</p>
+    <button class="btn-primary">Get Started</button>
+  </div>
+
+  <div class="card">
+    <h2>Keyboard Shortcuts</h2>
+    <p>Ctrl+Shift+A toggles the overlay. Ctrl+Z undoes the last annotation. Press Escape to cancel or close.</p>
+    <button class="btn-primary">Learn More</button>
+  </div>
+
+  <div class="card">
+    <h2>Drawing Tools</h2>
+    <p>Four tools available: arrow (point at things), box (enclose regions), text (place labels), freehand (draw freely).</p>
+    <button class="btn-danger">Delete Account</button>
+  </div>
+
+  <div class="card">
+    <h2>DOM-Aware</h2>
+    <p>Every annotation automatically links to the DOM element underneath. The output JSON includes CSS selectors — grep your source code directly.</p>
+  </div>
+</main>
+
+<footer>
+  Annotation Overlay — MIT License
+</footer>
+
+<script src="annotation-overlay.js"></script>
+</body>
+</html>
