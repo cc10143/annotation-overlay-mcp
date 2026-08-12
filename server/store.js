@@ -73,9 +73,13 @@ export function clear() {
   const store = readStore();
   const n = countAll(store);
   store.batches = [];
-  // Screenshot path belongs to the cleared feedback round — reset it too so
-  // read_annotations doesn't return a path to a stale/removed image.
+  // Screenshot paths and pending capture belong to the cleared feedback round —
+  // reset them too so read_annotations doesn't return stale/removed images and
+  // the extension doesn't act on a stale capture request.
   store.lastScreenshotPath = null;
+  store.lastAfterScreenshotPath = null;
+  store.lastAfterTabUrl = null;
+  store.pendingCapture = null;
   writeStore(store);
   return n;
 }
@@ -108,6 +112,54 @@ export function setScreenshotPath(p) {
 
 export function getScreenshotPath() {
   return readStore().lastScreenshotPath || null;
+}
+
+// Pending capture request — set by the MCP capture_page tool, read by the
+// extension's service-worker poll, cleared when the capture result arrives.
+export function setPendingCapture(id) {
+  const store = readStore();
+  store.pendingCapture = { id, ts: new Date().toISOString() };
+  writeStore(store);
+}
+
+export function getPendingCapture() {
+  return readStore().pendingCapture || null;
+}
+
+// Clear the pending request. When an id is given, only clear if it matches the
+// current pending request — so a stale capture result can't cancel a newer one.
+export function clearPendingCapture(id) {
+  const store = readStore();
+  if (store.pendingCapture && (!id || store.pendingCapture.id === id)) {
+    store.pendingCapture = null;
+    writeStore(store);
+  }
+}
+
+// The "after" screenshot — clean page capture requested by the agent for
+// before/after verification (as opposed to lastScreenshotPath, which is the
+// annotated "before" viewport saved on Submit).
+export function setAfterScreenshotPath(p) {
+  const store = readStore();
+  store.lastAfterScreenshotPath = p || null;
+  writeStore(store);
+}
+
+export function getAfterScreenshotPath() {
+  return readStore().lastAfterScreenshotPath || null;
+}
+
+// URL of the tab that produced the "after" capture. Lets the agent verify the
+// capture actually shows the page it expected (active-tab capture can hit a
+// different tab if the user switched away).
+export function setAfterTabUrl(p) {
+  const store = readStore();
+  store.lastAfterTabUrl = p || null;
+  writeStore(store);
+}
+
+export function getAfterTabUrl() {
+  return readStore().lastAfterTabUrl || null;
 }
 
 function countAll(store) {

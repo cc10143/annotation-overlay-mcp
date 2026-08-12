@@ -58,7 +58,8 @@ claude mcp add annotation-overlay-mcp -- node D:/KaiFa/annotation-overlay/server
 2. **Annotate** — use any of the 6 tools to mark issues
 3. **Submit** — click Submit to send structured JSON to the MCP server. The extension automatically captures a **viewport screenshot with annotations overlaid** and uploads it; the server saves it to `~/.annotation-overlay/screenshots/`
 4. **Agent reads** — Claude Code calls `read_annotations` → gets annotations + `screenshotPath` → feeds the screenshot to a vision-capable tool → processes feedback
-5. **Page refreshes** — extension auto-reinjects overlay → next round
+5. **Fix & verify** — after the page reloads with fixes, the agent calls `capture_page` → gets `afterScreenshotPath` (a clean post-fix viewport) → compares it against the annotated `screenshotPath` to confirm the fix actually landed
+6. **Page refreshes** — extension auto-reinjects overlay → next round
 
 ### Tools
 
@@ -97,13 +98,15 @@ On Submit, the extension captures the current viewport **with annotations overla
 
 `read_annotations` returns the absolute `screenshotPath` in its response. Pass it to a vision-capable tool (e.g. a vision MCP) to see exactly what the user is pointing at — this is how a non-multimodal agent gets visual context for the annotations.
 
+For **before/after verification**, the agent calls `capture_page` after the fix reloads the page. The extension captures the current viewport (clean — the overlay is inactive until toggled) and the server exposes it as `afterScreenshotPath` in `read_annotations`. Feeding both `screenshotPath` (annotated "before") and `afterScreenshotPath` (clean "after") to a vision-capable tool lets the agent confirm a fix landed instead of working blind.
+
 _Extension only._ Without the extension bridge (standalone script injection), submit proceeds without a screenshot.
 
 ## MCP Tools
 
 ### `read_annotations`
 
-Read all pending annotations. The response also includes `screenshotPath` — the absolute path to the last annotated viewport screenshot (saved on Submit), for vision-capable consumption.
+Read all pending annotations. The response also includes `screenshotPath` — the absolute path to the last annotated viewport screenshot (saved on Submit) — and `afterScreenshotPath` — the absolute path to the last `capture_page` screenshot (clean post-fix viewport), both for vision-capable consumption.
 
 Each annotation includes:
 
@@ -139,6 +142,8 @@ Each annotation includes:
 
 **`screenshotPath`** — added to the response when a screenshot was captured on submit, e.g. `"C:\Users\you\.annotation-overlay\screenshots\anno-2026-08-12T06-27-48.png"`. Pass it to a vision-capable tool to see the page with annotations overlaid.
 
+**`afterScreenshotPath`** — added to the response after an agent-requested `capture_page`, e.g. `"C:\Users\you\.annotation-overlay\screenshots\anno-2026-08-12T06-30-12.png"`. This is the clean post-fix viewport; compare it against `screenshotPath` to verify a fix landed. **`afterScreenshotTabUrl`** is the URL of the tab that was captured — confirm it matches the page you expected (the capture is of the active tab). All three are cleared by `clear_annotations`.
+
 **`position` shape varies by type** (viewport coordinates):
 
 | Type | position |
@@ -149,6 +154,16 @@ Each annotation includes:
 | freehand | `{ "points": [{"x","y"}, ...] }` |
 
 **`region`** (box/freehand only) is the container element that best represents the drawn area — e.g. the card `<div>` the user circled — with the same fallback chain as `selector`. Use it to locate the region when the box center happens to sit on a child element.
+
+### `capture_page`
+
+Capture the current page viewport and save it as the **"after"** state for before/after verification. The server asks the extension (via its existing ~10s badge poll) to capture the active tab of the focused window; the shot is clean — the extension hides any annotation overlay chrome before capturing. Returns the absolute path to the saved PNG plus the URL of the captured tab, e.g.:
+
+```json
+{ "ok": true, "path": "C:\\Users\\you\\.annotation-overlay\\screenshots\\anno-2026-08-12T06-30-12.png", "tabUrl": "https://example.com/" }
+```
+
+**Verify `tabUrl` matches the page you expect** — `capture_page` captures the active tab, so if the user switched tabs it would show the wrong page (the server can't tell). May take up to ~15s (extension poll + capture). Requires the extension to be loaded. Pair the result with `screenshotPath` from `read_annotations` to confirm a fix landed.
 
 ### `clear_annotations`
 

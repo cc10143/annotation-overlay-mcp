@@ -9,6 +9,10 @@ import {
   saveScreenshot,
   setScreenshotPath,
   getScreenshotPath,
+  getPendingCapture,
+  setAfterScreenshotPath,
+  setAfterTabUrl,
+  clearPendingCapture,
 } from "./store.js";
 
 const PORT = parseInt(process.env.ANNO_PORT || "3847", 10);
@@ -105,11 +109,33 @@ export function createHttpServer() {
 
   app.get("/api/annotations", (req, res) => {
     const screenshotPath = getScreenshotPath();
+    // captureRequest rides along the service worker's existing badge poll so
+    // the extension sees a pending agent-requested capture without extra calls.
+    const captureRequest = getPendingCapture();
     if (req.query.format === "batches") {
-      res.json({ batches: getBatches(), count: count(), screenshotPath });
+      res.json({ batches: getBatches(), count: count(), screenshotPath, captureRequest });
       return;
     }
-    res.json({ count: count(), annotations: getAll(), screenshotPath });
+    res.json({ count: count(), annotations: getAll(), screenshotPath, captureRequest });
+  });
+
+  // The extension posts the captured viewport here after seeing a pending
+  // captureRequest in its poll. Saves the screenshot, records it as the "after"
+  // state (plus the URL of the tab that was captured), and clears the pending
+  // request.
+  app.post("/api/capture-result", (req, res) => {
+    try {
+      const body = req.body || {};
+      const path = saveScreenshot(body.screenshotData);
+      if (path) {
+        setAfterScreenshotPath(path);
+        setAfterTabUrl(body.tabUrl);
+      }
+      clearPendingCapture(body.requestId);
+      res.json({ ok: !!path, path, tabUrl: body.tabUrl || null });
+    } catch (err) {
+      res.status(400).json({ ok: false, error: err.message });
+    }
   });
 
   app.delete("/api/annotations", (_req, res) => {
@@ -130,7 +156,7 @@ export function createHttpServer() {
   });
 
   app.get("/api/health", (_req, res) => {
-    res.json({ ok: true, version: "2.2.0" });
+    res.json({ ok: true, version: "2.3.0" });
   });
 
   return new Promise((resolve) => {
