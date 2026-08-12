@@ -64,19 +64,25 @@ claude mcp add annotation-overlay-mcp -- node D:/KaiFa/annotation-overlay/server
 
 | Tool | Label | How | DOM Link |
 |------|-------|-----|----------|
-| Arrow | ➤ | Click & drag → arrow with comment | Element under arrowhead |
-| Box | □ | Click & drag → rectangle with comment | Element under box center |
-| Text | T | Click → floating text label | Element under click point |
-| Freehand | ✎ | Click & drag → freeform drawing | Element under bbox center |
+| Arrow | ➤ | Click & drag → arrow | Element under arrowhead |
+| Box | □ | Click & drag → rectangle | **Region container** + element at box center |
+| Text | T | Click → type text label | Element under click point |
+| Freehand | ✎ | Click & drag → freeform drawing | **Region container** + bbox center element |
 | **Select** | **+** | Hover highlights blue → click to pin numbered badge | Clicked element |
-| **TextSel** | **[ ]** | Select page text → comment input at selection | Containing element |
+| **TextSel** | **[ ]** | Select page text → annotate instantly | Containing element |
+
+Drawing annotates **immediately** — no comment prompt interrupts your flow. To add a comment to an existing annotation, switch to the **Select** tool and **double-click** the drawing (or the numbered badge). Only the Text tool still prompts, because its text is the annotation itself.
 
 ### Keyboard Shortcuts
 
 | Key | Action |
 |-----|--------|
 | `Ctrl+Shift+A` | Toggle overlay |
+| `1–6` | Switch tool |
 | `Ctrl+Z` | Undo last annotation |
+| `Ctrl+Shift+Z` / `Ctrl+Y` | Redo |
+| `Double-click` | Edit annotation comment (select tool) |
+| `?` | Show shortcut panel |
 | `Escape` | Cancel drawing / close overlay |
 | `Enter` | Confirm comment |
 | `Shift+Enter` | Newline in comment |
@@ -94,8 +100,8 @@ Read all pending annotations. Each annotation includes:
 ```json
 {
   "id": "uuid",
-  "type": "arrow | circle | text | freehand | select | textsel",
-  "comment": "user feedback text",
+  "type": "circle",                       // arrow | circle | text | freehand | select | textsel
+  "comment": "user feedback text",        // empty until double-clicked in select mode
   "selector": "div.card:nth-child(1) > button.btn-primary",
   "fallbackSelectors": [
     { "type": "id", "value": "#submit-btn" },
@@ -106,10 +112,31 @@ Read all pending annotations. Each annotation includes:
   "classes": ["btn-primary"],
   "elementText": "Buy Now",
   "contentHash": "Buy Now-a3f8b2c1",
-  "position": { "start": {"x":100,"y":200}, "end": {"x":300,"y":400} },
+  "region": {                             // box/freehand only: the container element
+    "selector": "#card",                  //   covering the drawn area (deepest ancestor
+    "fallbackSelectors": [                //   whose rect covers ≥60% of the drawing)
+      { "type": "id", "value": "#card" },
+      { "type": "cssPath", "value": "div.card" },
+      { "type": "contentHash", "value": "Card A-..." }
+    ],
+    "tagName": "div",
+    "classes": ["card"]
+  },
+  "position": { "x": 100, "y": 200, "w": 200, "h": 100 },
   "color": "#e94560"
 }
 ```
+
+**`position` shape varies by type** (viewport coordinates):
+
+| Type | position |
+|------|----------|
+| arrow | `{ "start": {"x","y"}, "end": {"x","y"} }` |
+| circle / select / textsel | `{ "x", "y", "w", "h" }` |
+| text | `{ "x", "y" }` |
+| freehand | `{ "points": [{"x","y"}, ...] }` |
+
+**`region`** (box/freehand only) is the container element that best represents the drawn area — e.g. the card `<div>` the user circled — with the same fallback chain as `selector`. Use it to locate the region when the box center happens to sit on a child element.
 
 ### `clear_annotations`
 
