@@ -55,6 +55,32 @@ window.addEventListener("message", async (event) => {
       );
     }
   }
+
+  if (event.data?.type === "anno-export") {
+    const { format, payload } = event.data;
+    if (format === "markdown") {
+      try {
+        const res = await fetch(
+          `http://localhost:${ANNO_PORT}/api/export/markdown`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+          }
+        );
+        const md = await res.text();
+        window.postMessage(
+          { type: "anno-exported", format: "markdown", data: md },
+          "*"
+        );
+      } catch (err) {
+        window.postMessage(
+          { type: "anno-exported", format: "markdown", error: err.message },
+          "*"
+        );
+      }
+    }
+  }
 });
 
 // Get initial badge count from service worker
