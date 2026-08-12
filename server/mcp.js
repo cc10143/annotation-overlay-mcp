@@ -8,7 +8,7 @@ import { getAll, clear, count } from "./store.js";
 
 export function createMcpServer() {
   const server = new Server(
-    { name: "annotation-overlay-mcp", version: "2.0.0" },
+    { name: "annotation-overlay-mcp", version: "2.1.0" },
     { capabilities: { tools: {} } }
   );
 
