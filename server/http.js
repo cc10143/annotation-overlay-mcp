@@ -13,6 +13,9 @@ import {
   setAfterScreenshotPath,
   setAfterTabUrl,
   clearPendingCapture,
+  getPendingMode,
+  clearPendingMode,
+  setModeTabUrl,
 } from "./store.js";
 
 const PORT = parseInt(process.env.ANNO_PORT || "3847", 10);
@@ -109,14 +112,16 @@ export function createHttpServer() {
 
   app.get("/api/annotations", (req, res) => {
     const screenshotPath = getScreenshotPath();
-    // captureRequest rides along the service worker's existing badge poll so
-    // the extension sees a pending agent-requested capture without extra calls.
+    // captureRequest / modeRequest ride along the service worker's existing
+    // badge poll so the extension sees pending agent requests without extra
+    // calls.
     const captureRequest = getPendingCapture();
+    const modeRequest = getPendingMode();
     if (req.query.format === "batches") {
-      res.json({ batches: getBatches(), count: count(), screenshotPath, captureRequest });
+      res.json({ batches: getBatches(), count: count(), screenshotPath, captureRequest, modeRequest });
       return;
     }
-    res.json({ count: count(), annotations: getAll(), screenshotPath, captureRequest });
+    res.json({ count: count(), annotations: getAll(), screenshotPath, captureRequest, modeRequest });
   });
 
   // The extension posts the captured viewport here after seeing a pending
@@ -133,6 +138,19 @@ export function createHttpServer() {
       }
       clearPendingCapture(body.requestId);
       res.json({ ok: !!path, path, tabUrl: body.tabUrl || null });
+    } catch (err) {
+      res.status(400).json({ ok: false, error: err.message });
+    }
+  });
+
+  // The extension reports an applied annotation-mode change (from the
+  // set_annotation_mode MCP tool) after relaying it to the page's overlay.
+  app.post("/api/mode-result", (req, res) => {
+    try {
+      const body = req.body || {};
+      if (body.tabUrl) setModeTabUrl(body.tabUrl);
+      clearPendingMode(body.requestId);
+      res.json({ ok: true });
     } catch (err) {
       res.status(400).json({ ok: false, error: err.message });
     }

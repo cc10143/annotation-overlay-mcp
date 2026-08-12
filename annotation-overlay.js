@@ -1158,6 +1158,10 @@
   // compositing is needed — we only hide toolbar/comment/shortcut UI first.
   // Without an extension bridge the request times out and callback(null) fires,
   // so submit proceeds without a screenshot.
+  // The timeout (3s) is generous: the extension's MV3 service worker may be
+  // cold-started by this message (Chrome suspends idle SWs), and a cold start +
+  // capture can take over a second — 1.2s was too tight and dropped the before
+  // screenshot on the first submit after a cold SW.
   function captureScreenshot(callback) {
     hideOverlayUI();
     var done = false;
@@ -1176,7 +1180,7 @@
       window.removeEventListener("message", handler);
       restoreOverlayUI();
       callback(null);
-    }, 1200);
+    }, 3000);
   }
 
   // ===================================================================
@@ -1594,6 +1598,11 @@
       if (e.data?.type === "anno-config") {
         mcpPort = e.data.port || DEFAULT_PORT;
         console.log("[AnnotationOverlay] Configured for port " + mcpPort);
+      } else if (e.data?.type === "anno-set-mode") {
+        // Agent-initiated activation/deactivation, relayed by the extension's
+        // service worker from the set_annotation_mode MCP tool.
+        if (e.data.enabled) activate();
+        else deactivate();
       }
     });
   }
@@ -1617,11 +1626,11 @@
       submit: submit,
     };
 
-    // Extension-injected: auto-activate
-    // When injected via bridge.js (Chrome extension), activate immediately.
-    // The ?__anno=1 URL param is also supported for standalone injection.
-    var injectedByExtension = !!document.querySelector("script[data-anno-overlay]");
-    if (injectedByExtension || /[?&]__anno=1(&|$)/.test(window.location.search)) {
+    // The extension does NOT auto-activate anymore — the agent controls the
+    // toolbar via the set_annotation_mode MCP tool, so normal browsing stays
+    // clean. Ctrl+Shift+A still toggles manually. The ?__anno=1 URL param is
+    // kept for standalone injection.
+    if (/[?&]__anno=1(&|$)/.test(window.location.search)) {
       activate();
     }
   }

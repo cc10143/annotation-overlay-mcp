@@ -14,6 +14,10 @@ import {
   getPendingCapture,
   setPendingCapture,
   clearPendingCapture,
+  setPendingMode,
+  getPendingMode,
+  clearPendingMode,
+  getModeTabUrl,
 } from "./store.js";
 
 export function createMcpServer() {
@@ -56,6 +60,26 @@ export function createMcpServer() {
           type: "object",
           properties: {},
           required: [],
+        },
+      },
+      {
+        name: "set_annotation_mode",
+        description:
+          "Show or hide the annotation toolbar on the active tab so the user can give visual feedback. " +
+          "By default the overlay is injected but the toolbar stays hidden during normal browsing; call this with " +
+          "enabled:true before asking the user to annotate, and enabled:false after processing. " +
+          "The extension relays the change to the page's overlay via its ~10s badge poll and confirms when applied. " +
+          "Returns { ok, enabled, tabUrl } — the URL of the tab the toolbar was toggled on, so you can verify it's the " +
+          "page the user is looking at. Requires the Chrome extension to be loaded and the target page to be the active tab.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            enabled: {
+              type: "boolean",
+              description: "true to show the annotation toolbar, false to hide it",
+            },
+          },
+          required: ["enabled"],
         },
       },
       {
@@ -132,6 +156,48 @@ export function createMcpServer() {
                   ok: false,
                   error:
                     "No capture received within 25s. Ensure the Chrome extension is loaded and the target page is the active tab.",
+                },
+                null,
+                2
+              ),
+            },
+          ],
+        };
+      }
+      case "set_annotation_mode": {
+        const enabled = !!(request.params.arguments && request.params.arguments.enabled);
+        const id = setPendingMode(enabled);
+        // Wait for the extension's service worker to relay the change to the
+        // page's overlay and confirm via /api/mode-result (clears pendingMode).
+        const deadline = Date.now() + 25000;
+        while (Date.now() < deadline) {
+          const pending = getPendingMode();
+          if (!pending || pending.id !== id) break;
+          await new Promise((r) => setTimeout(r, 1000));
+        }
+        const current = getPendingMode();
+        if (!current || current.id !== id) {
+          return {
+            content: [
+              {
+                type: "text",
+                text: JSON.stringify({ ok: true, enabled, tabUrl: getModeTabUrl() }, null, 2),
+              },
+            ],
+          };
+        }
+        // Timed out — clear our own pending request so a stale mode change
+        // doesn't apply later.
+        clearPendingMode(id);
+        return {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify(
+                {
+                  ok: false,
+                  error:
+                    "No mode change applied within 25s. Ensure the Chrome extension is loaded and the target page is the active tab.",
                 },
                 null,
                 2

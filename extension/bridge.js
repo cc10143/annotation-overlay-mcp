@@ -24,6 +24,18 @@ function injectOverlayScript() {
   (document.head || document.documentElement).appendChild(script);
 }
 
+// SW → ISOLATED world → MAIN world: agent-initiated annotation mode control
+// (the set_annotation_mode MCP tool is relayed by the service worker's poll).
+chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+  if (message?.type === "anno-set-mode") {
+    window.postMessage(
+      { type: "anno-set-mode", enabled: message.enabled, requestId: message.requestId },
+      "*"
+    );
+    sendResponse({ ok: true });
+  }
+});
+
 // MAIN world → ISOLATED world: receive annotation batch
 window.addEventListener("message", async (event) => {
   if (event.source !== window) return;

@@ -7,6 +7,9 @@ const POLL_INTERVAL = 10000;
 // poll re-capturing before the server clears the pending flag.
 let lastCaptureRequestId = null;
 
+// Id of the last pending annotation-mode change we acted on (same dedup purpose).
+let lastModeRequestId = null;
+
 async function fetchState() {
   try {
     const res = await fetch(`http://localhost:${ANNO_PORT}/api/annotations`);
@@ -93,10 +96,59 @@ async function handleCaptureRequest(req) {
   });
 }
 
+// Relay an agent-requested annotation-mode change (set_annotation_mode MCP
+// tool) to the active tab's overlay. The server sets pendingMode; this poll
+// sends the change to the tab's content script (bridge → overlay), which shows
+// or hides the toolbar. Confirmation comes back through tabs.sendMessage's
+// callback, then we report to the server so the tool can return.
+async function handleModeRequest(req) {
+  if (!req || !req.id) return;
+  if (req.id === lastModeRequestId) return; // already handled / in flight
+  lastModeRequestId = req.id;
+
+  let tabId, tabUrl;
+  try {
+    const win = await chrome.windows.getLastFocused();
+    const [tab] = await chrome.tabs.query({ active: true, windowId: win.id });
+    tabId = tab && tab.id;
+    tabUrl = tab && tab.url;
+  } catch {}
+  if (!tabId) {
+    lastModeRequestId = null; // allow retry next poll
+    return;
+  }
+
+  try {
+    await chrome.tabs.sendMessage(tabId, {
+      type: "anno-set-mode",
+      enabled: !!req.enabled,
+      requestId: req.id,
+    });
+  } catch {
+    // No receiver (page not injectable / overlay missing) — retry next poll.
+    lastModeRequestId = null;
+    return;
+  }
+
+  try {
+    const res = await fetch(`http://localhost:${ANNO_PORT}/api/mode-result`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ requestId: req.id, ok: true, tabUrl }),
+    });
+    if (!res.ok) lastModeRequestId = null; // retry next poll
+  } catch {
+    lastModeRequestId = null; // retry next poll
+  }
+}
+
 async function refreshBadge() {
   const data = await fetchState();
   updateBadge(data ? data.count : null);
-  if (data) handleCaptureRequest(data.captureRequest);
+  if (data) {
+    handleCaptureRequest(data.captureRequest);
+    handleModeRequest(data.modeRequest);
+  }
 }
 
 // Listen for bridge messages

@@ -79,7 +79,9 @@ export function clear() {
   store.lastScreenshotPath = null;
   store.lastAfterScreenshotPath = null;
   store.lastAfterTabUrl = null;
+  store.lastModeTabUrl = null;
   store.pendingCapture = null;
+  store.pendingMode = null;
   writeStore(store);
   return n;
 }
@@ -160,6 +162,41 @@ export function setAfterTabUrl(p) {
 
 export function getAfterTabUrl() {
   return readStore().lastAfterTabUrl || null;
+}
+
+// Pending annotation-mode change — set by the MCP set_annotation_mode tool, read
+// by the extension's service-worker poll (relays to the page's overlay), cleared
+// when the mode-result arrives. Returns the generated id for the tool to wait on.
+export function setPendingMode(enabled) {
+  const store = readStore();
+  const id = crypto.randomUUID();
+  store.pendingMode = { id, enabled: !!enabled, ts: new Date().toISOString() };
+  writeStore(store);
+  return id;
+}
+
+export function getPendingMode() {
+  return readStore().pendingMode || null;
+}
+
+export function clearPendingMode(id) {
+  const store = readStore();
+  if (store.pendingMode && (!id || store.pendingMode.id === id)) {
+    store.pendingMode = null;
+    writeStore(store);
+  }
+}
+
+// URL of the tab the mode change was applied to (for the agent to verify it
+// activated on the right page).
+export function setModeTabUrl(p) {
+  const store = readStore();
+  store.lastModeTabUrl = p || null;
+  writeStore(store);
+}
+
+export function getModeTabUrl() {
+  return readStore().lastModeTabUrl || null;
 }
 
 function countAll(store) {

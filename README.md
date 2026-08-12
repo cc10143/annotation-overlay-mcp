@@ -28,7 +28,7 @@ npm start
 3. Click **Load unpacked**
 4. Select the `extension/` directory
 
-The overlay now auto-injects on every page. Press `Ctrl+Shift+A` to toggle the toolbar.
+The overlay auto-injects on every page, but the toolbar stays **hidden during normal browsing** (it's a tool for agents, not a resident UI). To annotate, either press `Ctrl+Shift+A`, or — in the feedback flow — have the agent call `set_annotation_mode(true)`, which shows the toolbar on the active tab.
 
 ### 3. Configure Claude Code MCP
 
@@ -54,9 +54,9 @@ claude mcp add annotation-overlay-mcp -- node D:/KaiFa/annotation-overlay/server
 
 ### Annotation Workflow
 
-1. **Open any page** — the overlay auto-injects via Chrome extension
+1. **Agent enables annotation mode** — Claude Code calls `set_annotation_mode(true)` → the toolbar appears on the active tab (the overlay is hidden by default)
 2. **Annotate** — use any of the 6 tools to mark issues
-3. **Submit** — click Submit to send structured JSON to the MCP server. The extension automatically captures a **viewport screenshot with annotations overlaid** and uploads it; the server saves it to `~/.annotation-overlay/screenshots/`
+3. **Submit** — click Submit to send structured JSON to the MCP server. The extension automatically captures a **viewport screenshot with annotations overlaid** and uploads it; the server saves it to `~/.annotation-overlay/screenshots/`. Submit also hides the toolbar and deactivates the overlay.
 4. **Agent reads** — Claude Code calls `read_annotations` → gets annotations + `screenshotPath` → feeds the screenshot to a vision-capable tool → processes feedback
 5. **Fix & verify** — after the page reloads with fixes, the agent calls `capture_page` → gets `afterScreenshotPath` (a clean post-fix viewport) → compares it against the annotated `screenshotPath` to confirm the fix actually landed
 6. **Page refreshes** — extension auto-reinjects overlay → next round
@@ -164,6 +164,16 @@ Capture the current page viewport and save it as the **"after"** state for befor
 ```
 
 **Verify `tabUrl` matches the page you expect** — `capture_page` captures the active tab, so if the user switched tabs it would show the wrong page (the server can't tell). May take up to ~15s (extension poll + capture). Requires the extension to be loaded. Pair the result with `screenshotPath` from `read_annotations` to confirm a fix landed.
+
+### `set_annotation_mode`
+
+Show or hide the annotation toolbar on the active tab, so the user can give visual feedback. The overlay is injected on every page but the toolbar is **hidden by default** — this is how the agent turns it on before asking the user to annotate, and off after processing:
+
+```json
+{ "ok": true, "enabled": true, "tabUrl": "https://example.com/" }
+```
+
+The extension relays the change to the page's overlay via its ~10s badge poll. May take up to ~15s. Requires the extension to be loaded and the target page to be the active tab. The user can also toggle manually with `Ctrl+Shift+A`.
 
 ### `clear_annotations`
 
