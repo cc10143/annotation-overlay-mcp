@@ -56,6 +56,22 @@ window.addEventListener("message", async (event) => {
     }
   }
 
+  if (event.data?.type === "anno-capture") {
+    // Forward screenshot request to service worker (captureVisibleTab is not
+    // available in content scripts), then relay the dataURL back to MAIN world.
+    chrome.runtime.sendMessage({ type: "anno-capture" }, (resp) => {
+      window.postMessage(
+        {
+          type: "anno-captured",
+          ok: resp?.ok ?? false,
+          dataURL: resp?.dataUrl,
+          error: resp?.error,
+        },
+        "*"
+      );
+    });
+  }
+
   if (event.data?.type === "anno-export") {
     const { format, payload } = event.data;
     if (format === "markdown") {

@@ -1,6 +1,15 @@
 import express from "express";
 import cors from "cors";
-import { addAnnotations, getAll, clear, count, getBatches } from "./store.js";
+import {
+  addAnnotations,
+  getAll,
+  clear,
+  count,
+  getBatches,
+  saveScreenshot,
+  setScreenshotPath,
+  getScreenshotPath,
+} from "./store.js";
 
 const PORT = parseInt(process.env.ANNO_PORT || "3847", 10);
 
@@ -69,23 +78,38 @@ function generateMarkdown(batches) {
 export function createHttpServer() {
   const app = express();
   app.use(cors());
-  app.use(express.json({ limit: "2mb" }));
+  // 15mb to fit a base64 PNG screenshot dataURL attached to a submit.
+  app.use(express.json({ limit: "15mb" }));
 
   app.post("/api/annotations", (req, res) => {
     try {
-      const n = addAnnotations(req.body, req.body.url);
-      res.json({ ok: true, count: n });
+      const body = req.body || {};
+      // screenshotData is a base64 dataURL of the annotated viewport;
+      // persist it to disk and record the path before storing the batch.
+      const screenshotData = body.screenshotData;
+      const clean = { ...body };
+      delete clean.screenshotData;
+
+      let screenshotPath = null;
+      if (screenshotData) {
+        screenshotPath = saveScreenshot(screenshotData);
+        if (screenshotPath) setScreenshotPath(screenshotPath);
+      }
+
+      const n = addAnnotations(clean, clean.url);
+      res.json({ ok: true, count: n, screenshotPath });
     } catch (err) {
       res.status(400).json({ ok: false, error: err.message });
     }
   });
 
   app.get("/api/annotations", (req, res) => {
+    const screenshotPath = getScreenshotPath();
     if (req.query.format === "batches") {
-      res.json({ batches: getBatches(), count: count() });
+      res.json({ batches: getBatches(), count: count(), screenshotPath });
       return;
     }
-    res.json({ count: count(), annotations: getAll() });
+    res.json({ count: count(), annotations: getAll(), screenshotPath });
   });
 
   app.delete("/api/annotations", (_req, res) => {
@@ -106,7 +130,7 @@ export function createHttpServer() {
   });
 
   app.get("/api/health", (_req, res) => {
-    res.json({ ok: true, version: "2.1.0" });
+    res.json({ ok: true, version: "2.2.0" });
   });
 
   return new Promise((resolve) => {

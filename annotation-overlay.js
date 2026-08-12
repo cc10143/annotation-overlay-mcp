@@ -1130,6 +1130,56 @@
   }
 
   // ===================================================================
+  //  Screenshot capture (attach annotated viewport to submit)
+  // ===================================================================
+
+  function hideOverlayUI() {
+    ["__anno_toolbar", "__anno_comment", "__anno_shortcuts"].forEach(function (id) {
+      var el = document.getElementById(id);
+      if (el && el.style.display !== "none") {
+        el.dataset.annoPrevDisplay = el.style.display;
+        el.style.display = "none";
+      }
+    });
+  }
+
+  function restoreOverlayUI() {
+    ["__anno_toolbar", "__anno_comment", "__anno_shortcuts"].forEach(function (id) {
+      var el = document.getElementById(id);
+      if (el && el.dataset.annoPrevDisplay !== undefined) {
+        el.style.display = el.dataset.annoPrevDisplay;
+        delete el.dataset.annoPrevDisplay;
+      }
+    });
+  }
+
+  // Ask the extension to capture the current visible tab. The capture includes
+  // the overlay's canvas annotations and badges (they are DOM), so no separate
+  // compositing is needed — we only hide toolbar/comment/shortcut UI first.
+  // Without an extension bridge the request times out and callback(null) fires,
+  // so submit proceeds without a screenshot.
+  function captureScreenshot(callback) {
+    hideOverlayUI();
+    var done = false;
+    var handler = function (e) {
+      if (e.data?.type === "anno-captured") {
+        window.removeEventListener("message", handler);
+        done = true;
+        restoreOverlayUI();
+        callback(e.data.ok && e.data.dataURL ? e.data.dataURL : null);
+      }
+    };
+    window.addEventListener("message", handler);
+    window.postMessage({ type: "anno-capture" }, "*");
+    setTimeout(function () {
+      if (done) return;
+      window.removeEventListener("message", handler);
+      restoreOverlayUI();
+      callback(null);
+    }, 1200);
+  }
+
+  // ===================================================================
   //  Submit (to MCP server via extension bridge)
   // ===================================================================
 
@@ -1147,36 +1197,45 @@
       annotations: annotations.slice(), // copy
     };
 
-    var json = JSON.stringify(payload, null, 2);
-    console.log("[AnnotationOverlay] Submitting " + annotations.length + " annotation(s)...\n" + json);
+    // Capture the annotated viewport (page + annotations) and attach it to the
+    // submit. In the Chrome extension this runs via captureVisibleTab; without
+    // an extension bridge the capture times out and submit proceeds without a
+    // screenshot.
+    captureScreenshot(function (dataURL) {
+      if (dataURL) payload.screenshotData = dataURL;
 
-    var submitted = false;
-    var handler = function (e) {
-      if (e.data?.type === "anno-submitted") {
-        window.removeEventListener("message", handler);
-        submitted = true;
-        if (e.data.ok) {
-          console.log("[AnnotationOverlay] Submitted. " + e.data.count + " total on server.");
-          clearAnnos();
-          deactivate();
-        } else {
-          console.error("[AnnotationOverlay] Submit failed:", e.data.error);
+      var logPayload = Object.assign({}, payload);
+      delete logPayload.screenshotData;
+      console.log("[AnnotationOverlay] Submitting " + annotations.length + " annotation(s)...\n" + JSON.stringify(logPayload, null, 2));
+
+      var submitted = false;
+      var handler = function (e) {
+        if (e.data?.type === "anno-submitted") {
+          window.removeEventListener("message", handler);
+          submitted = true;
+          if (e.data.ok) {
+            console.log("[AnnotationOverlay] Submitted. " + e.data.count + " total on server.");
+            clearAnnos();
+            deactivate();
+          } else {
+            console.error("[AnnotationOverlay] Submit failed:", e.data.error);
+          }
         }
-      }
-    };
-    window.addEventListener("message", handler);
+      };
+      window.addEventListener("message", handler);
 
-    // Send via postMessage to bridge.js (ISOLATED world)
-    window.postMessage({ type: "anno-submit", payload: payload }, "*");
+      // Send via postMessage to bridge.js (ISOLATED world)
+      window.postMessage({ type: "anno-submit", payload: payload }, "*");
 
-    // Fallback: if no bridge response after 3s, try direct fetch
-    setTimeout(function () {
-      if (!submitted) {
-        window.removeEventListener("message", handler);
-        console.log("[AnnotationOverlay] Bridge not responding, trying direct fetch...");
-        directSubmit(payload);
-      }
-    }, 3000);
+      // Fallback: if no bridge response after 3s, try direct fetch
+      setTimeout(function () {
+        if (!submitted) {
+          window.removeEventListener("message", handler);
+          console.log("[AnnotationOverlay] Bridge not responding, trying direct fetch...");
+          directSubmit(payload);
+        }
+      }, 3000);
+    });
   }
 
   function directSubmit(payload) {

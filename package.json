@@ -1,6 +1,6 @@
 {
   "name": "annotation-overlay-mcp",
-  "version": "2.1.0",
+  "version": "2.2.0",
   "description": "DOM-aware visual annotation overlay with Chrome Extension & MCP Server for AI coding agents. 6 interaction modes. Built for Claude Code.",
   "license": "MIT",
   "type": "module",

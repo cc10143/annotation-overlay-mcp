@@ -4,11 +4,11 @@ import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
-import { getAll, clear, count } from "./store.js";
+import { getAll, clear, count, getScreenshotPath } from "./store.js";
 
 export function createMcpServer() {
   const server = new Server(
-    { name: "annotation-overlay-mcp", version: "2.1.0" },
+    { name: "annotation-overlay-mcp", version: "2.2.0" },
     { capabilities: { tools: {} } }
   );
 
@@ -20,6 +20,8 @@ export function createMcpServer() {
           "Read all pending visual annotation feedback. " +
           "Each annotation includes a CSS selector, fallback selector chain (id → cssPath → contentHash), " +
           "comment, annotation type (arrow/box/text/freehand/select/textsel), color, viewport position, and element metadata. " +
+          "If a screenshot was captured on submit, `screenshotPath` is the absolute path to a PNG of the annotated viewport " +
+          "(page with annotations overlaid, toolbar hidden) — pass it to a vision-capable tool to see what the user is pointing at. " +
           "Use this to consume user feedback after they press Submit in the overlay.",
         inputSchema: {
           type: "object",
@@ -45,12 +47,13 @@ export function createMcpServer() {
     switch (name) {
       case "read_annotations": {
         const anns = getAll();
+        const screenshotPath = getScreenshotPath();
         return {
           content: [
             {
               type: "text",
               text: JSON.stringify(
-                { count: count(), annotations: anns },
+                { count: count(), annotations: anns, screenshotPath },
                 null,
                 2
               ),

@@ -33,7 +33,7 @@ async function refreshBadge() {
 }
 
 // Listen for bridge messages
-chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === "badge-update") {
     updateBadge(message.count);
     sendResponse({ ok: true });
@@ -41,6 +41,24 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     fetchCount()
       .then((c) => sendResponse({ count: c ?? 0 }))
       .catch(() => sendResponse({ count: 0 }));
+    return true; // async response
+  } else if (message.type === "anno-capture") {
+    // Capture the current visible tab (page + overlay annotations rendered in
+    // DOM). MV3 captureVisibleTab requires a user gesture; the Submit click in
+    // the overlay reaches this handler through the content-script message
+    // chain, so the transient gesture is still in effect here.
+    const windowId = sender.tab ? sender.tab.windowId : undefined;
+    chrome.tabs.captureVisibleTab(
+      windowId,
+      { format: "png" },
+      (dataUrl) => {
+        if (chrome.runtime.lastError) {
+          sendResponse({ ok: false, error: chrome.runtime.lastError.message });
+        } else {
+          sendResponse({ ok: true, dataUrl });
+        }
+      }
+    );
     return true; // async response
   }
 });

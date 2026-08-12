@@ -56,8 +56,8 @@ claude mcp add annotation-overlay-mcp -- node D:/KaiFa/annotation-overlay/server
 
 1. **Open any page** — the overlay auto-injects via Chrome extension
 2. **Annotate** — use any of the 6 tools to mark issues
-3. **Submit** — click Submit to send structured JSON to the MCP server
-4. **Agent reads** — Claude Code calls `read_annotations` → processes feedback
+3. **Submit** — click Submit to send structured JSON to the MCP server. The extension automatically captures a **viewport screenshot with annotations overlaid** and uploads it; the server saves it to `~/.annotation-overlay/screenshots/`
+4. **Agent reads** — Claude Code calls `read_annotations` → gets annotations + `screenshotPath` → feeds the screenshot to a vision-capable tool → processes feedback
 5. **Page refreshes** — extension auto-reinjects overlay → next round
 
 ### Tools
@@ -91,11 +91,21 @@ Drawing annotates **immediately** — no comment prompt interrupts your flow. To
 
 5 preset colors: red `#e94560`, blue `#4080f0`, green `#2ecc71`, yellow `#f1c40f`, purple `#9b59b6`.
 
+### Screenshot
+
+On Submit, the extension captures the current viewport **with annotations overlaid** — the canvas strokes and numbered badges are DOM, so they appear in the shot naturally; only the toolbar is hidden during capture. The screenshot is uploaded to the MCP server and saved to `~/.annotation-overlay/screenshots/anno-<timestamp>.png`.
+
+`read_annotations` returns the absolute `screenshotPath` in its response. Pass it to a vision-capable tool (e.g. a vision MCP) to see exactly what the user is pointing at — this is how a non-multimodal agent gets visual context for the annotations.
+
+_Extension only._ Without the extension bridge (standalone script injection), submit proceeds without a screenshot.
+
 ## MCP Tools
 
 ### `read_annotations`
 
-Read all pending annotations. Each annotation includes:
+Read all pending annotations. The response also includes `screenshotPath` — the absolute path to the last annotated viewport screenshot (saved on Submit), for vision-capable consumption.
+
+Each annotation includes:
 
 ```json
 {
@@ -126,6 +136,8 @@ Read all pending annotations. Each annotation includes:
   "color": "#e94560"
 }
 ```
+
+**`screenshotPath`** — added to the response when a screenshot was captured on submit, e.g. `"C:\Users\you\.annotation-overlay\screenshots\anno-2026-08-12T06-27-48.png"`. Pass it to a vision-capable tool to see the page with annotations overlaid.
 
 **`position` shape varies by type** (viewport coordinates):
 
@@ -184,7 +196,7 @@ __annotationOverlay.submit()      // send to MCP server via direct fetch
 
 ```
 ┌──────────────────────────────────────────────────────┐
-│  annotation-overlay.js  (src/, ~700 lines)            │
+│  annotation-overlay.js  (src/, ~1600 lines)          │
 │                                                      │
 │  ┌──────────┐  ┌──────────┐  ┌──────────────────┐   │
 │  │ Toolbar  │  │  Canvas  │  │  DOM Bridge      │   │
@@ -221,10 +233,12 @@ __annotationOverlay.submit()      // send to MCP server via direct fetch
 │  └──────┬───────┘  └──────┬───────┘                   │
 │         └────────┬─────────┘                           │
 │         ┌────────▼────────┐                            │
-│         │  In-memory Store│                            │
+│         │  File Store      │                            │
 │         └─────────────────┘                            │
 └────────────────────────────────────────────────────────┘
 ```
+
+> On Submit the extension captures the annotated viewport; the server saves it to `~/.annotation-overlay/screenshots/` and `read_annotations` surfaces the path via `screenshotPath`.
 
 ## Comparison
 
