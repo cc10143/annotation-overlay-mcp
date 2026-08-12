@@ -704,10 +704,11 @@
       "position:fixed;inset:0;z-index:2147483646;pointer-events:auto;";
     document.body.appendChild(canvas);
 
+    // getContext before resizeCanvas — resizeCanvas calls redrawAll which needs ctx
+    ctx = canvas.getContext("2d");
+
     dpr = window.devicePixelRatio || 1;
     resizeCanvas();
-
-    ctx = canvas.getContext("2d");
 
     canvas.addEventListener("mousedown", onMouseDown);
     canvas.addEventListener("mousemove", onMouseMove);

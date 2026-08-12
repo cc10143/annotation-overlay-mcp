@@ -886,13 +886,18 @@
     // Don't intercept shortcuts when typing in comment input
     if (commentBox && commentBox.contains(document.activeElement)) return;
 
-    if (e.ctrlKey && e.key === "z" && !e.shiftKey) {
+    // Case-insensitive key match: physical keyboards report "Z" when
+    // Shift is held, but synthesized/automation events may report "z".
+    if (e.ctrlKey && e.key.toLowerCase() === "z" && !e.shiftKey) {
       e.preventDefault();
       undo();
       return;
     }
 
-    if ((e.ctrlKey && e.shiftKey && e.key === "Z") || (e.ctrlKey && e.key === "y")) {
+    if (
+      e.ctrlKey &&
+      ((e.key.toLowerCase() === "z" && e.shiftKey) || e.key.toLowerCase() === "y")
+    ) {
       e.preventDefault();
       redo();
       return;
@@ -1200,10 +1205,12 @@
       "position:fixed;inset:0;z-index:2147483646;pointer-events:auto;";
     document.body.appendChild(canvas);
 
+    // getContext must come BEFORE resizeCanvas — resizeCanvas calls
+    // redrawAll which uses ctx, and a null ctx throws on activation.
+    ctx = canvas.getContext("2d");
+
     dpr = window.devicePixelRatio || 1;
     resizeCanvas();
-
-    ctx = canvas.getContext("2d");
 
     canvas.addEventListener("mousedown", onMouseDown);
     canvas.addEventListener("mousemove", onMouseMove);
