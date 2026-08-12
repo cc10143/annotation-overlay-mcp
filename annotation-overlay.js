@@ -194,6 +194,30 @@
     };
   }
 
+  // For box/freehand: find the deepest ancestor whose rect covers ≥60% of the
+  // drawn region. One container element = "this region" — clearer for the agent
+  // than a list of every element the box happens to overlap.
+  function findRegionContainer(box) {
+    if (!box || box.w <= 0 || box.h <= 0) return null;
+    var cx = box.x + box.w / 2;
+    var cy = box.y + box.h / 2;
+    var el = elementAt(cx, cy);
+    if (!el) return null;
+    var boxArea = box.w * box.h;
+    var cur = el;
+    while (cur && cur !== document.body && cur !== document.documentElement) {
+      var r = cur.getBoundingClientRect();
+      var ox = Math.max(0, Math.min(r.right, box.x + box.w) - Math.max(r.left, box.x));
+      var oy = Math.max(0, Math.min(r.bottom, box.y + box.h) - Math.max(r.top, box.y));
+      var inter = ox * oy;
+      if (inter >= boxArea * 0.6) {
+        return cur;
+      }
+      cur = cur.parentElement;
+    }
+    return null;
+  }
+
   function pinBadge(el, index) {
     var rect = el.getBoundingClientRect();
     var badge = document.createElement("div");
@@ -918,8 +942,16 @@
       var cw = Math.abs(savedDrawing.endX - savedDrawing.startX);
       var ch = Math.abs(savedDrawing.endY - savedDrawing.startY);
       ann.position = { x: cx, y: cy, w: cw, h: ch };
+      // Box: attach the region container element (the ancestor covering this area)
+      var regionBox = { x: cx, y: cy, w: cw, h: ch };
+      var regionEl = findRegionContainer(regionBox);
+      if (regionEl) ann.region = elementMeta(regionEl);
     } else if (savedDrawing.tool === "freehand") {
       ann.position = { points: savedDrawing.points };
+      // Freehand: region container over the stroke's bounding box
+      var fhBox = { x: minX, y: minY, w: maxX - minX, h: maxY - minY };
+      var fhRegionEl = findRegionContainer(fhBox);
+      if (fhRegionEl) ann.region = elementMeta(fhRegionEl);
     }
 
     redoStack = [];
