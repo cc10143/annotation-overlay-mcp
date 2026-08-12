@@ -62,6 +62,10 @@
   // select tool state
   var highlightedEl = null;
 
+  // select-tool debounce: delays pin so a double-click's first click
+  // doesn't fire it (dblclick in select mode edits annotations instead)
+  var selectClickTimer = null;
+
   // numbered badges (DOM refs for cleanup)
   var badges = [];
 
@@ -199,6 +203,12 @@
     badge.style.top = (rect.top - 6) + "px";
     badge.dataset.annoBadgeIdx = String(index);
     badge.dataset.annoIdx = String(index);
+    badge.addEventListener("dblclick", function (e) {
+      e.stopPropagation();
+      if (currentTool !== "select") return;
+      var ann = annotations[parseInt(badge.dataset.annoIdx, 10) - 1];
+      if (ann) editAnnotation(ann, e.clientX, e.clientY);
+    });
     document.body.appendChild(badge);
     badges.push(badge);
   }
@@ -290,6 +300,27 @@
           ctx.lineTo(pts[i].x * dpr, pts[i].y * dpr);
         }
         ctx.stroke();
+        break;
+
+      case "textsel":
+        // Highlight block over the selected text so the annotation is visible
+        // on the canvas and double-clickable (select mode edits the comment).
+        if (!ann.position || typeof ann.position.w === "undefined") return;
+        ctx.fillStyle = rgbaStr(ann.color, 0.15);
+        ctx.fillRect(
+          ann.position.x * dpr,
+          ann.position.y * dpr,
+          ann.position.w * dpr,
+          ann.position.h * dpr
+        );
+        ctx.strokeStyle = ann.color;
+        ctx.lineWidth = 1 * dpr;
+        ctx.strokeRect(
+          ann.position.x * dpr,
+          ann.position.y * dpr,
+          ann.position.w * dpr,
+          ann.position.h * dpr
+        );
         break;
     }
   }
@@ -503,7 +534,10 @@
   //  Comment input
   // ===================================================================
 
-  function showCommentInput(x, y, callback) {
+  // initialValue (optional): prefill the textarea for editing existing annotations.
+  // Add → callback(text) (empty string passes through, caller decides whether to
+  // keep/clear); Cancel / Esc → callback(null).
+  function showCommentInput(x, y, callback, initialValue) {
     hideCommentInput();
 
     commentBox = document.createElement("div");
@@ -519,12 +553,16 @@
     document.body.appendChild(commentBox);
 
     var input = commentBox.querySelector("#__anno_comment_input");
+    if (typeof initialValue === "string") {
+      input.value = initialValue;
+      input.setSelectionRange(initialValue.length, initialValue.length);
+    }
     input.focus();
 
     commentBox.querySelector("#__anno_comment_ok").addEventListener("click", function () {
       var text = input.value.trim();
       hideCommentInput();
-      if (text) callback(text); else callback(null);
+      callback(text);
     });
     commentBox.querySelector("#__anno_comment_cancel").addEventListener("click", function () {
       hideCommentInput();
@@ -536,7 +574,7 @@
         e.preventDefault();
         var text = input.value.trim();
         hideCommentInput();
-        if (text) callback(text); else callback(null);
+        callback(text);
       }
       if (e.key === "Escape") {
         hideCommentInput();
@@ -580,17 +618,18 @@
     if (!el) return;
     clearHighlight();
 
-    var rect = el.getBoundingClientRect();
-    var cx = rect.left + rect.width / 2;
-    var cy = rect.top;
-    var idx = annotations.length + 1;
+    // v2.2: pin immediately (no comment prompt). Debounce 250ms so a
+    // double-click's first click doesn't pin — dblclick edits instead.
+    if (selectClickTimer) clearTimeout(selectClickTimer);
+    selectClickTimer = setTimeout(function () {
+      selectClickTimer = null;
 
-    showCommentInput(cx, cy + 8, function (comment) {
+      var rect = el.getBoundingClientRect();
       var meta = elementMeta(el);
       var ann = {
         id: makeId(),
         type: "select",
-        comment: comment || "",
+        comment: "",
         color: currentColor,
         selector: meta.selector,
         fallbackSelectors: meta.fallbackSelectors,
@@ -610,7 +649,71 @@
       pinBadge(el, annotations.length);
       redrawAll();
       updateToolUI();
-    });
+    }, 250);
+  }
+
+  // ===================================================================
+  //  Double-click to edit annotation comment (select mode only)
+  // ===================================================================
+
+  function distToSegment(px, py, ax, ay, bx, by) {
+    var dx = bx - ax, dy = by - ay;
+    var lenSq = dx * dx + dy * dy;
+    if (lenSq === 0) return Math.hypot(px - ax, py - ay);
+    var t = Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / lenSq));
+    var cx = ax + t * dx, cy = ay + t * dy;
+    return Math.hypot(px - cx, py - cy);
+  }
+
+  function distToPolyline(px, py, points) {
+    if (!points || points.length < 2) return Infinity;
+    var min = Infinity;
+    for (var i = 1; i < points.length; i++) {
+      var d = distToSegment(px, py, points[i - 1].x, points[i - 1].y, points[i].x, points[i].y);
+      if (d < min) min = d;
+    }
+    return min;
+  }
+
+  function pointInRect(px, py, rx, ry, rw, rh, pad) {
+    return px >= rx - pad && px <= rx + rw + pad && py >= ry - pad && py <= ry + rh + pad;
+  }
+
+  // Topmost first: later annotations render on top, so hit them first.
+  function hitTestAnnotation(x, y) {
+    for (var i = annotations.length - 1; i >= 0; i--) {
+      var ann = annotations[i];
+      var p = ann.position;
+      if (!p) continue;
+      if (ann.type === "arrow" && p.start && p.end) {
+        if (distToSegment(x, y, p.start.x, p.start.y, p.end.x, p.end.y) < 12) return ann;
+      } else if (ann.type === "circle") {
+        if (pointInRect(x, y, p.x, p.y, p.w, p.h, 12)) return ann;
+      } else if (ann.type === "freehand") {
+        if (distToPolyline(x, y, p.points) < 12) return ann;
+      } else if ((ann.type === "select" || ann.type === "textsel") && typeof p.w !== "undefined") {
+        if (pointInRect(x, y, p.x, p.y, p.w, p.h, 8)) return ann;
+      }
+    }
+    return null;
+  }
+
+  function editAnnotation(ann, x, y) {
+    showCommentInput(x, y, function (comment) {
+      if (comment === null) return; // cancelled
+      ann.comment = comment;
+      redrawAll();
+      updateSubmitCount();
+    }, ann.comment);
+  }
+
+  function onCanvasDblClick(e) {
+    if (currentTool !== "select") return;
+    // Cancel the pending single-click pin so a double-click doesn't badge
+    if (selectClickTimer) { clearTimeout(selectClickTimer); selectClickTimer = null; }
+    var p = canvasCoords(e);
+    var ann = hitTestAnnotation(p.x, p.y);
+    if (ann) editAnnotation(ann, p.x, p.y);
   }
 
   // ===================================================================
@@ -627,37 +730,38 @@
 
     var selectedText = sel.toString().trim().substring(0, 200);
 
-    showCommentInput(rect.left + rect.width / 2, rect.bottom + 8, function (comment) {
-      if (!comment) return;
+    // v2.2: annotate immediately (selectedText IS the content), no prompt.
+    // Double-click in select mode edits the comment later.
+    var container = range.commonAncestorContainer;
+    var el = container.nodeType === 3 ? container.parentElement : container;
 
-      var container = range.commonAncestorContainer;
-      var el = container.nodeType === 3 ? container.parentElement : container;
+    var meta = elementMeta(el);
+    var ann = {
+      id: makeId(),
+      type: "textsel",
+      comment: "",
+      color: currentColor,
+      selectedText: selectedText,
+      selector: meta.selector,
+      fallbackSelectors: meta.fallbackSelectors,
+      tagName: meta.tagName,
+      classes: meta.classes,
+      elementText: meta.elementText,
+      contentHash: meta.contentHash,
+      position: {
+        x: rect.left,
+        y: rect.top,
+        w: rect.width,
+        h: rect.height,
+      },
+    };
+    redoStack = [];
+    annotations.push(ann);
+    redrawAll();
+    updateToolUI();
 
-      var meta = elementMeta(el);
-      var ann = {
-        id: makeId(),
-        type: "textsel",
-        comment: comment,
-        color: currentColor,
-        selectedText: selectedText,
-        selector: meta.selector,
-        fallbackSelectors: meta.fallbackSelectors,
-        tagName: meta.tagName,
-        classes: meta.classes,
-        elementText: meta.elementText,
-        contentHash: meta.contentHash,
-        position: {
-          x: rect.left,
-          y: rect.top,
-          w: rect.width,
-          h: rect.height,
-        },
-      };
-      redoStack = [];
-      annotations.push(ann);
-      redrawAll();
-      updateToolUI();
-    });
+    // Clear the selection highlight so it doesn't linger visually
+    sel.removeAllRanges();
   }
 
   // ===================================================================
@@ -785,45 +889,43 @@
     drawing = null;
     redrawAll();
 
-    showCommentInput(p.x, p.y, function (comment) {
-      if (!comment) return;
+    // v2.2: draw → annotate immediately, no comment prompt.
+    // Double-click in select mode edits the comment later.
+    var el = elementAt(targetX, targetY);
+    var meta = elementMeta(el);
 
-      var el = elementAt(targetX, targetY);
-      var meta = elementMeta(el);
+    var ann = {
+      id: makeId(),
+      type: savedDrawing.tool,
+      comment: "",
+      color: currentColor,
+      selector: meta.selector,
+      fallbackSelectors: meta.fallbackSelectors,
+      tagName: meta.tagName,
+      classes: meta.classes,
+      elementText: meta.elementText,
+      contentHash: meta.contentHash,
+    };
 
-      var ann = {
-        id: makeId(),
-        type: savedDrawing.tool,
-        comment: comment,
-        color: currentColor,
-        selector: meta.selector,
-        fallbackSelectors: meta.fallbackSelectors,
-        tagName: meta.tagName,
-        classes: meta.classes,
-        elementText: meta.elementText,
-        contentHash: meta.contentHash,
+    if (savedDrawing.tool === "arrow") {
+      ann.position = {
+        start: { x: savedDrawing.startX, y: savedDrawing.startY },
+        end: { x: savedDrawing.endX, y: savedDrawing.endY },
       };
+    } else if (savedDrawing.tool === "circle") {
+      var cx = Math.min(savedDrawing.startX, savedDrawing.endX);
+      var cy = Math.min(savedDrawing.startY, savedDrawing.endY);
+      var cw = Math.abs(savedDrawing.endX - savedDrawing.startX);
+      var ch = Math.abs(savedDrawing.endY - savedDrawing.startY);
+      ann.position = { x: cx, y: cy, w: cw, h: ch };
+    } else if (savedDrawing.tool === "freehand") {
+      ann.position = { points: savedDrawing.points };
+    }
 
-      if (savedDrawing.tool === "arrow") {
-        ann.position = {
-          start: { x: savedDrawing.startX, y: savedDrawing.startY },
-          end: { x: savedDrawing.endX, y: savedDrawing.endY },
-        };
-      } else if (savedDrawing.tool === "circle") {
-        var cx = Math.min(savedDrawing.startX, savedDrawing.endX);
-        var cy = Math.min(savedDrawing.startY, savedDrawing.endY);
-        var cw = Math.abs(savedDrawing.endX - savedDrawing.startX);
-        var ch = Math.abs(savedDrawing.endY - savedDrawing.startY);
-        ann.position = { x: cx, y: cy, w: cw, h: ch };
-      } else if (savedDrawing.tool === "freehand") {
-        ann.position = { points: savedDrawing.points };
-      }
-
-      redoStack = [];
-      annotations.push(ann);
-      redrawAll();
-      updateToolUI();
-    });
+    redoStack = [];
+    annotations.push(ann);
+    redrawAll();
+    updateToolUI();
 
     e.preventDefault();
   }
@@ -941,6 +1043,7 @@
       ["1–6", "Switch tool"],
       ["Ctrl+Z", "Undo"],
       ["Ctrl+Shift+Z / Ctrl+Y", "Redo"],
+      ["Double-click", "Edit comment (select tool)"],
       ["Escape", "Cancel / Close"],
       ["Enter", "Confirm comment"],
       ["Shift+Enter", "Newline in comment"],
@@ -1215,6 +1318,7 @@
     canvas.addEventListener("mousedown", onMouseDown);
     canvas.addEventListener("mousemove", onMouseMove);
     canvas.addEventListener("mouseup", onMouseUp);
+    canvas.addEventListener("dblclick", onCanvasDblClick);
     window.addEventListener("resize", resizeCanvas);
 
     // Text selection handler (global, not on canvas)
@@ -1226,6 +1330,7 @@
     canvas.removeEventListener("mousedown", onMouseDown);
     canvas.removeEventListener("mousemove", onMouseMove);
     canvas.removeEventListener("mouseup", onMouseUp);
+    canvas.removeEventListener("dblclick", onCanvasDblClick);
     window.removeEventListener("resize", resizeCanvas);
     document.removeEventListener("mouseup", handleTextSelection);
     clearHighlight();
@@ -1380,9 +1485,11 @@
       "  font-size:11px;font-weight:700;" +
       "  font-family:system-ui,-apple-system,sans-serif;" +
       "  display:flex;align-items:center;justify-content:center;" +
-      "  pointer-events:none;" +
+      "  pointer-events:auto;" +
+      "  cursor:pointer;" +
       "  box-shadow:0 1px 4px rgba(0,0,0,.4);" +
-      "}";
+      "}" +
+      ".__anno_badge:hover { transform:scale(1.15); }";
     document.head.appendChild(style);
   }
 
