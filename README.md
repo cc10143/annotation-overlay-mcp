@@ -54,12 +54,12 @@ claude mcp add annotation-overlay-mcp -- node D:/KaiFa/annotation-overlay/server
 
 ### Annotation Workflow
 
-1. **Agent enables annotation mode** — Claude Code calls `set_annotation_mode(true)` → the toolbar appears on the active tab (the overlay is hidden by default)
+1. **Agent launches the annotation browser (primary)** — Claude Code runs the `annotation-browser-launch` skill: Playwright opens chromium with the extension + a persistent profile, navigates to the target page, and shows the toolbar. (Fallback: the agent calls `set_annotation_mode(true)` on the user's own Chrome.)
 2. **Annotate** — use any of the 6 tools to mark issues
 3. **Submit** — click Submit to send structured JSON to the MCP server. The extension automatically captures a **viewport screenshot with annotations overlaid** and uploads it; the server saves it to `~/.annotation-overlay/screenshots/`. Submit also hides the toolbar and deactivates the overlay.
 4. **Agent reads** — Claude Code calls `read_annotations` → gets annotations + `screenshotPath` → feeds the screenshot to a vision-capable tool → processes feedback
-5. **Fix & verify** — after the page reloads with fixes, the agent calls `capture_page` → gets `afterScreenshotPath` (a clean post-fix viewport) → compares it against the annotated `screenshotPath` to confirm the fix actually landed
-6. **Page refreshes** — extension auto-reinjects overlay → next round
+5. **Fix & verify** — after the fix, the agent refreshes the annotation browser (via CDP reconnect), then compares a fresh screenshot against the annotated `screenshotPath` to confirm the fix actually landed
+6. **Next round** — the agent re-activates the overlay and repeats
 
 ### Tools
 
@@ -178,6 +178,21 @@ The extension relays the change to the page's overlay via its ~10s badge poll. M
 ### `clear_annotations`
 
 Clear all stored annotations. Call after processing feedback.
+
+## Claude Code Skills
+
+The repo ships two skills (in `skills/`) that encode the annotation feedback loop. Install them to `~/.claude/skills/` with:
+
+```bash
+npm run install-skills
+```
+
+| Skill | Purpose |
+|-------|---------|
+| `annotation-browser-launch` | **Primary flow.** The agent launches its own annotation browser (Playwright chromium + extension + persistent profile + fixed CDP port), navigates the target page, and shows the toolbar. The agent natively controls navigation/refresh/screenshot afterward. |
+| `annotation-feedback-wait` | Wait for the user's submission (background watcher polling the annotation count — the MCP server can't push), then `read_annotations`, process, and `clear_annotations`. |
+
+Edit the skills in `skills/` (the repo is the source of truth), then re-run `npm run install-skills` to sync.
 
 ## Selector Fallback Chain
 
