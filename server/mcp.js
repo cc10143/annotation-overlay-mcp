@@ -19,6 +19,7 @@ import {
   clearPendingMode,
   getModeTabUrl,
 } from "./store.js";
+import { getHttpBindingInfo } from "./http.js";
 
 export function createMcpServer() {
   const server = new Server(
@@ -39,6 +40,9 @@ export function createMcpServer() {
           "If the agent requested a page capture via `capture_page`, `afterScreenshotPath` is the absolute path to the clean " +
           "(post-fix) viewport and `afterScreenshotTabUrl` is the URL of the tab that was captured — pair the two to verify a " +
           "fix actually landed, and confirm `afterScreenshotTabUrl` matches the page you expected. " +
+          "`httpOwnedExternally` is true when another annotation-overlay instance holds the HTTP port (e.g. a stale `npm start`), " +
+          "with `externalHttpVersion` naming that instance — read/clear still work against the shared store, but capture_page/" +
+          "set_annotation_mode may fail until the stale process is killed. " +
           "Use this to consume user feedback after they press Submit in the overlay.",
         inputSchema: {
           type: "object",
@@ -103,12 +107,21 @@ export function createMcpServer() {
         const screenshotPath = getScreenshotPath();
         const afterScreenshotPath = getAfterScreenshotPath();
         const afterScreenshotTabUrl = getAfterTabUrl();
+        const binding = getHttpBindingInfo();
         return {
           content: [
             {
               type: "text",
               text: JSON.stringify(
-                { count: count(), annotations: anns, screenshotPath, afterScreenshotPath, afterScreenshotTabUrl },
+                {
+                  count: count(),
+                  annotations: anns,
+                  screenshotPath,
+                  afterScreenshotPath,
+                  afterScreenshotTabUrl,
+                  httpOwnedExternally: binding.ownedExternally,
+                  externalHttpVersion: binding.externalVersion,
+                },
                 null,
                 2
               ),

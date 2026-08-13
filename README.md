@@ -144,6 +144,8 @@ Each annotation includes:
 
 **`afterScreenshotPath`** — added to the response after an agent-requested `capture_page`, e.g. `"C:\Users\you\.annotation-overlay\screenshots\anno-2026-08-12T06-30-12.png"`. This is the clean post-fix viewport; compare it against `screenshotPath` to verify a fix landed. **`afterScreenshotTabUrl`** is the URL of the tab that was captured — confirm it matches the page you expected (the capture is of the active tab). All three are cleared by `clear_annotations`.
 
+**`httpOwnedExternally`** — `true` when another annotation-overlay instance holds the HTTP port (e.g. a stale `npm start`, or an orphaned MCP child from an abrupt Claude Code shutdown), with `externalHttpVersion` naming that instance. `read_annotations`/`clear_annotations` still work against the shared store, but `capture_page`/`set_annotation_mode` may fail until the stale process is killed (`netstat -ano | grep :3847` → `taskkill //PID <pid> //F`). The server no longer crashes on a port conflict — it keeps the MCP tools alive and reports this flag instead.
+
 **`position` shape varies by type** (viewport coordinates):
 
 | Type | position |

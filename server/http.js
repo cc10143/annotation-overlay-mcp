@@ -20,6 +20,26 @@ import {
 
 const PORT = parseInt(process.env.ANNO_PORT || "3847", 10);
 
+// Runtime HTTP-binding state (in-memory only — NOT part of the file store).
+// When another annotation-overlay instance already holds the HTTP port, this
+// process keeps its MCP stdio alive and reports the situation via
+// read_annotations, so the agent sees it without any manual diagnosis.
+const httpBinding = { ownedExternally: false, externalVersion: null };
+
+export function getHttpBindingInfo() {
+  return { ...httpBinding };
+}
+
+async function probeExternalVersion() {
+  try {
+    const res = await fetch(`http://localhost:${PORT}/api/health`);
+    const data = await res.json();
+    httpBinding.externalVersion = data.version || null;
+  } catch {
+    httpBinding.externalVersion = null;
+  }
+}
+
 function generateMarkdown(batches) {
   const lines = [];
   const all = [];
@@ -181,6 +201,26 @@ export function createHttpServer() {
     const server = app.listen(PORT, () => {
       console.log("[annotation-overlay-mcp] HTTP server on port " + PORT);
       resolve(server);
+    });
+    server.on("error", (err) => {
+      if (err.code === "EADDRINUSE") {
+        // Another instance holds the port (e.g. a stale `npm start`, or an
+        // orphaned MCP child from an abrupt Claude Code shutdown). Don't crash —
+        // keep MCP stdio alive against the shared file store, and surface the
+        // situation through read_annotations so the agent sees it automatically.
+        httpBinding.ownedExternally = true;
+        console.warn(
+          `[annotation-overlay-mcp] WARNING: port ${PORT} already in use by another instance — ` +
+            "HTTP disabled for this process; MCP tools still run against the shared store. " +
+            "read_annotations reports httpOwnedExternally=true. " +
+            "Fix: kill the stale process (netstat -ano | grep :" + PORT + "), or ignore if only read/clear are needed."
+        );
+        probeExternalVersion();
+        resolve(null);
+      } else {
+        console.error("[annotation-overlay-mcp] HTTP listen error:", err.message);
+        resolve(null);
+      }
     });
   });
 }
