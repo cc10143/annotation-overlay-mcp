@@ -19,7 +19,13 @@ description: 通过 Annotation Overlay（浏览器标注扩展 + MCP server）�
 - 用户 Chrome 已加载 Annotation Overlay 扩展（chrome://extensions → Load unpacked → `extension/` 目录）
 - MCP server 在 localhost:3847 健康（`curl http://localhost:3847/api/health`）
 
-### 2. 挂后台 watcher（关键，在请用户标注之前）
+### 2. 先 clear_annotations（关键：保证读到的是这一轮的新反馈）
+
+调 `clear_annotations` 清空 store。**clear 在前**而不是在后：这样 `read_annotations` 永远只返回本轮用户新提交的标注，不需要"判断哪些是残留"。也顺带清掉上一轮的 before/after 截图路径。
+
+（要保留历史做对比就跳过此步，改用 `_receivedAt` 时间戳判断残留 —— 主流程不做这个。）
+
+### 3. 挂后台 watcher（在请用户标注之前）
 
 用后台 watcher 轮询标注数量，count 变化即通知：
 
@@ -44,7 +50,7 @@ done
 
 用户 submit → count 增加 → 收到通知。agent 自己 `clear_annotations` → count 回落 → 也收到通知。
 
-### 3. 让标注工具栏出现（主流程：agent 自己的浏览器）
+### 4. 让标注工具栏出现（主流程：agent 自己的浏览器）
 
 **主入口**：调 `annotation-browser-launch` skill —— agent 用 Playwright 拉起 chromium-956323 + 扩展 + 持久 profile，导航目标页并 `activate()` 显示工具栏。agent 拥有浏览器，后续刷新/截图/复验都由 agent 原生控制。
 
@@ -52,7 +58,7 @@ done
 
 然后明确告诉用户：在浏览器用标注工具圈画问题区域（箭头/方框/文字/自由画/点选元素/选文字），然后点 **Submit**。
 
-### 4. 等通知，读取
+### 5. 等通知，读取
 
 收到 watcher 通知（或用户确认已提交）后，调 `read_annotations`。返回结构：
 
@@ -71,14 +77,15 @@ done
 }
 ```
 
-### 5. 处理 + 清理
+### 6. 处理
 
 - 把 `screenshotPath`（before，提交时捕获的标注视图）喂视觉 MCP，看用户指的位置
 - 修复后调 `capture_page` 拿 after 截图，喂视觉 MCP 对比确认修复生效
-- 处理完调 `clear_annotations` 清空，为下一轮准备
+- **不在这里 clear** —— 下一轮开始时的步骤 2 会清，保证每轮数据隔离，没有"判断残留"的负担
 
 ## 关键要点
 
+- **clear 在前是流程纪律**：每轮开始先 `clear_annotations`，`read_annotations` 就永远只含本轮新反馈，不用判断"哪些是残留"（见步骤 2）
 - **没有 watcher 时必须主动轮询** `read_annotations` —— MCP 拉取模型，不轮询就感知不到提交
 - `capture_page` 捕获的是**最近聚焦窗口的活动 tab**，返回的 `tabUrl` 要核对是否是要验证的页面（用户切 tab 会截到错页）
 - `screenshotPath`（before）在提交时捕获，可能因扩展 SW 冷启动超时（overlay 1.2s 捕获超时）而缺失 —— 缺失时以 `afterScreenshotPath` + 标注数据为准
