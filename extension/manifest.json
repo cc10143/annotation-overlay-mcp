@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Annotation Overlay MCP",
-  "version": "2.3.0",
+  "version": "2.3.1",
   "description": "Visual annotation overlay for AI coding agents. Draw arrows, boxes, text, freehand, click elements, and annotate text selections. Submit structured annotations via MCP server.",
   "permissions": ["storage", "activeTab", "scripting"],
   "host_permissions": ["<all_urls>", "http://localhost:3847/*"],

@@ -947,9 +947,15 @@
       var regionEl = findRegionContainer(regionBox);
       if (regionEl) ann.region = elementMeta(regionEl);
     } else if (savedDrawing.tool === "freehand") {
-      ann.position = { points: savedDrawing.points };
-      // Freehand: region container over the stroke's bounding box
       var fhBox = { x: minX, y: minY, w: maxX - minX, h: maxY - minY };
+      ann.position = {
+        points: savedDrawing.points,
+        // v2.3.1: expose the stroke's bounding box so read_annotations carries a
+        // concrete region even when the stroke sits on empty body space where no
+        // DOM selector resolves (selector stays ""). Points stay for redraw.
+        boundingBox: fhBox,
+      };
+      // Freehand: region container over the stroke's bounding box
       var fhRegionEl = findRegionContainer(fhBox);
       if (fhRegionEl) ann.region = elementMeta(fhRegionEl);
     }

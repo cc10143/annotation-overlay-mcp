@@ -10,6 +10,8 @@ import {
   setScreenshotPath,
   getScreenshotPath,
   getPendingCapture,
+  getAfterScreenshotPath,
+  getAfterTabUrl,
   setAfterScreenshotPath,
   setAfterTabUrl,
   clearPendingCapture,
@@ -132,16 +134,18 @@ export function createHttpServer() {
 
   app.get("/api/annotations", (req, res) => {
     const screenshotPath = getScreenshotPath();
+    const afterScreenshotPath = getAfterScreenshotPath();
+    const afterScreenshotTabUrl = getAfterTabUrl();
     // captureRequest / modeRequest ride along the service worker's existing
     // badge poll so the extension sees pending agent requests without extra
     // calls.
     const captureRequest = getPendingCapture();
     const modeRequest = getPendingMode();
     if (req.query.format === "batches") {
-      res.json({ batches: getBatches(), count: count(), screenshotPath, captureRequest, modeRequest });
+      res.json({ batches: getBatches(), count: count(), screenshotPath, afterScreenshotPath, afterScreenshotTabUrl, captureRequest, modeRequest });
       return;
     }
-    res.json({ count: count(), annotations: getAll(), screenshotPath, captureRequest, modeRequest });
+    res.json({ count: count(), annotations: getAll(), screenshotPath, afterScreenshotPath, afterScreenshotTabUrl, captureRequest, modeRequest });
   });
 
   // The extension posts the captured viewport here after seeing a pending
@@ -194,7 +198,7 @@ export function createHttpServer() {
   });
 
   app.get("/api/health", (_req, res) => {
-    res.json({ ok: true, version: "2.3.0" });
+    res.json({ ok: true, version: "2.3.1" });
   });
 
   return new Promise((resolve) => {

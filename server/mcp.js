@@ -23,7 +23,7 @@ import { getHttpBindingInfo } from "./http.js";
 
 export function createMcpServer() {
   const server = new Server(
-    { name: "annotation-overlay-mcp", version: "2.3.0" },
+    { name: "annotation-overlay-mcp", version: "2.3.1" },
     { capabilities: { tools: {} } }
   );
 

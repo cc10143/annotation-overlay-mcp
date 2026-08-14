@@ -27,15 +27,10 @@ description: 通过 Annotation Overlay（浏览器标注扩展 + MCP server）�
 
 ### 3. 挂后台 watcher（在请用户标注之前）
 
-用后台 watcher 轮询标注数量，count 变化即通知：
+用 **Monitor 工具**轮询标注数量，count 变化即推送事件。**不要用 Bash 的 `run_in_background` 起 watcher** —— 它只在进程退出时通知一次，持续输出的行不会推送，submit 后 agent 感知不到（踩过）。
 
-```
-后台命令：每 ~5s 轮询 http://localhost:3847/api/annotations 的 count，
-count 与上次不同时输出一行（如 "annotation count changed: 0 -> 3"）。
-首次读取只初始化、不输出（避免启动噪音）。
-```
+Monitor 的 command 每个 stdout 行都变成事件通知，所以脚本只在 count 变化时输出一行：
 
-示例（curl + grep，Windows Git Bash 可用）：
 ```bash
 last=""
 while true; do
@@ -48,7 +43,7 @@ while true; do
 done
 ```
 
-用户 submit → count 增加 → 收到通知。agent 自己 `clear_annotations` → count 回落 → 也收到通知。
+Monitor 会一直跑到 timeout 或 TaskStop。用户 submit → count 增加 → 收到事件；agent 自己 `clear_annotations` → count 回落 → 也收到事件。超时后若还需等待，重启一个 Monitor。
 
 ### 4. 让标注工具栏出现（主流程：agent 自己的浏览器）
 
