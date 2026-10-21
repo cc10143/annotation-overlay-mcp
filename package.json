@@ -15,7 +15,7 @@
     "install-skills": "node scripts/install-skills.js"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.0.0",
+    "@modelcontextprotocol/sdk": "^1.32.0",
     "cors": "^2.8.5",
     "express": "^4.21.0"
   },
